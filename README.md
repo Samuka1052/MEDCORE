@@ -1,11 +1,6 @@
-# Recepção Hospitalar
+# MEDCORE
 
-Pequeno sistema de recepção hospitalar em HTML/CSS/JS (frontend-only). Coleta dados do paciente, gera um número aleatório único e salva no `localStorage` do navegador.
-
-Como usar (modo sem servidor)
-- Abra o arquivo `index.html` no navegador.
-- Preencha os campos e clique em `Gerar Número` para obter um ID ou `Salvar Paciente` para gravar os dados no `localStorage`.
-- Use `Exportar CSV` para baixar todos os registros.
+Sistema de gerenciamento hospitalar para treinamento, com interface web e servidor Node.js/Express.
 
 Como usar com servidor
 1. Abra um terminal na pasta do projeto.
