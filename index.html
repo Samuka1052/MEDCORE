@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Recepção Hospitalar</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <img class="brand-logo" src="MEDCORE_Logo_horizontal_azul-semfundo.png" alt="MEDCORE">
+      <div class="header-copy">
+        <h1>Recepção Hospitalar</h1>
+      </div>
+    </header>
+
+    <section id="loginView" class="card login-card">
+      <h2>Entrar no sistema</h2>
+      <form id="loginForm">
+        <label for="loginCpf">CPF</label>
+        <div class="input-icon-field">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <rect x="4" y="3" width="16" height="18" rx="2"></rect>
+            <path d="M8 8h8M8 12h5M8 16h8"></path>
+          </svg>
+          <input id="loginCpf" inputmode="numeric" autocomplete="username" maxlength="14" placeholder="000.000.000-00" required>
+        </div>
+        <label for="loginPassword">Senha</label>
+        <div class="input-icon-field">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <rect x="4" y="10" width="16" height="11" rx="2"></rect>
+            <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"></path>
+          </svg>
+          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Digite sua senha" required>
+        </div>
+        <button type="submit" class="primary">Entrar</button>
+        <div id="loginError" class="error-text visible"></div>
+      </form>
+      <button type="button" id="forgotPasswordBtn" class="text-button">Esqueci minha senha</button>
+      <form id="recoverPasswordForm" class="hidden" novalidate>
+        <label for="recoveryEmail">E-mail cadastrado</label>
+        <div class="input-icon-field">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+            <path d="m4 7 8 6 8-6"></path>
+          </svg>
+          <input id="recoveryEmail" type="email" autocomplete="email" placeholder="nome@dominio.com" required>
+        </div>
+        <button type="submit" class="primary">Enviar link de recuperação</button>
+        <p id="recoveryMessage" class="form-message" role="status" aria-live="polite"></p>
+        <button type="button" id="backToLoginBtn" class="text-button">Voltar ao login</button>
+      </form>
+    </section>
+
+    <div id="appShell" class="hidden">
+
+    <nav class="topnav">
+      <button data-view="register" class="active">Registro</button>
+      <button data-view="queue">Fila</button>
+      <button data-view="in-progress">Em andamento</button>
+      <button data-view="search">Buscar</button>
+      <button data-view="appointments">Agendamentos</button>
+      <button data-view="doctors">Médicos</button>
+      <button data-view="dashboard">Dashboard</button>
+      <button data-view="callpanel">Painel de Chamada</button>
+    </nav>
+    <div class="session-bar"><span id="sessionLabel"></span><button type="button" id="logoutBtn">Sair</button></div>
+
+    <section id="view-register" class="card view">
+      <form id="patientForm" novalidate>
+        <div class="row">
+          <div class="col">
+            <label for="name">Nome completo</label>
+            <input type="text" id="name" name="name" required minlength="3" pattern="[A-Za-zÀ-ÿ\s.'-]{3,}" placeholder="Ex: Maria da Silva">
+          </div>
+          <div class="col">
+            <label for="dob">Data de nascimento</label>
+            <input type="text" id="dob" name="dob" required inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy">
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label for="gender">Gênero</label>
+            <select id="gender" name="gender" required>
+              <option value="">Selecione</option>
+              <option>Feminino</option>
+              <option>Masculino</option>
+              <option>Outro</option>
+              <option>Prefiro não informar</option>
+            </select>
+          </div>
+          <div class="col">
+            <label for="phone">Telefone</label>
+            <input type="tel" id="phone" name="phone" required inputmode="numeric" autocomplete="tel" placeholder="(11) 91234-5678" pattern="^\(\d{2}\)\s\d{4,5}-\d{4}$">
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label for="email">E-mail</label>
+            <input type="email" id="email" name="email" required placeholder="nome@dominio.com" pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$">
+          </div>
+          <div class="col">
+            <label for="insurance">Convênio</label>
+            <select id="insurance" name="insurance" required>
+              <option value="">Selecione</option>
+              <option>SUS</option>
+              <option>Particular</option>
+              <option>Unimed</option>
+              <option>Amil</option>
+              <option>Bradesco Saúde</option>
+              <option>Hapvida</option>
+              <option>NotreDame Intermédica</option>
+              <option>São Francisco Saúde</option>
+              <option>Golden Cross</option>
+              <option>PlanServ</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label for="address">Endereço</label>
+            <input id="address" name="address" required minlength="5" placeholder="Rua, número, bairro, cidade">
+          </div>
+          <div class="col">
+            <label for="priority">Prioridade</label>
+            <select id="priority" name="priority" required>
+              <option value="Normal">Normal</option>
+              <option value="Urgente">Urgente</option>
+              <option value="Emergência">Emergência</option>
+            </select>
+          </div>
+          <div class="col emergency-doctor-field hidden">
+            <label for="registrationDoctor">Médico Emergencista</label>
+            <select id="registrationDoctor" name="registrationDoctor">
+              <option value="">Selecione o médico</option>
+            </select>
+          </div>
+        </div>
+
+        <label for="notes">Motivo / Observações</label>
+        <textarea id="notes" name="notes" rows="3" placeholder="Descreva sintomas, observações e motivo da consulta"></textarea>
+
+        <div class="actions">
+          <button type="button" id="generateBtn" class="primary">Gerar senha</button>
+          <button type="submit" id="saveBtn" class="primary">Salvar paciente</button>
+          <button type="button" id="exportBtn">Exportar CSV</button>
+          <button type="button" id="clearBtn" class="danger">Limpar tudo</button>
+        </div>
+
+        <div class="generated">
+          <strong>ID do paciente:</strong> <span id="patientId">—</span>
+          <span class="divider">|</span>
+          <strong>Senha:</strong> <span id="queueNumber">—</span>
+        </div>
+      </form>
+      <div class="card list-card">
+        <h2>Pacientes Registrados</h2>
+        <div class="table-wrap">
+          <table id="patientsTable">
+            <thead>
+              <tr><th>ID</th><th>Nome</th><th>Data Nasc</th><th>Prioridade</th><th>Contato</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-queue" class="card view hidden">
+      <h2>Fila de Atendimento</h2>
+      <p class="muted">Mostra apenas as senhas. Clique em uma senha para chamar o paciente.</p>
+      <div class="queue-section emergency-queue">
+        <h3>Fila do Registro — Urgência e Emergência</h3>
+        <div id="urgentQueueList" class="queue-list"></div>
+      </div>
+      <div class="queue-section scheduled-queue">
+        <h3>Fila de Pacientes Agendados</h3>
+        <div id="scheduledQueueList" class="queue-list"></div>
+      </div>
+      <div class="call-area">
+        <label>Sala / Setor</label>
+        <input id="callRoom" required placeholder="Ex: Sala 03">
+        <button id="callBtn" class="primary">Chamar</button>
+        <button id="finishBtn">Finalizar Atendimento</button>
+      </div>
+    </section>
+
+    <section id="view-in-progress" class="card view hidden">
+      <h2>Pacientes em andamento</h2>
+      <p class="muted">Atendimentos chamados que ainda não foram finalizados.</p>
+      <div id="inProgressList" class="queue-list"></div>
+    </section>
+
+    <section id="view-search" class="card view hidden">
+      <h2>Buscar Paciente</h2>
+      <input id="searchInput" placeholder="Nome, ID, telefone ou data de nascimento">
+      <div id="searchResults" class="table-wrap"></div>
+    </section>
+
+    <section id="view-appointments" class="card view hidden">
+      <h2>Agendamentos</h2>
+      <form id="apptForm" class="appt-form">
+        <div class="row">
+          <div class="col"><label>Nome completo</label><input id="apptPatientName" required minlength="3" placeholder="Nome do paciente"></div>
+          <div class="col"><label>ID do paciente (opcional)</label><input id="apptPatientId" placeholder="Ex: P12345678"></div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label>Especialidade</label>
+            <select id="apptSpecialty" required>
+              <option value="">Selecione</option><option>Cardiologia</option><option>Dermatologia</option><option>Endocrinologia</option><option>Ginecologia</option><option>Neurologia</option><option>Clínica Geral</option><option>Pediatria</option><option>Ortopedia</option><option>Psiquiatria</option><option>Urologia</option>
+            </select>
+          </div>
+          <div class="col"><label>Médico</label><select id="apptDoctor" required disabled><option value="">Selecione a especialidade primeiro</option></select></div>
+        </div>
+        <div class="row">
+          <div class="col"><label>Data disponível</label><select id="apptDate" required disabled><option value="">Selecione o médico primeiro</option></select></div>
+          <div class="col"><label>Horário da consulta <span id="apptDurationLabel"></span></label><select id="apptTime" required disabled><option value="">Selecione médico e data</option></select></div>
+          <div class="col"><label>Data de nascimento</label><input id="apptDob" type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy" required></div>
+        </div>
+        <div class="row">
+          <div class="col"><label>Gênero</label><select id="apptGender" required><option value="">Selecione</option><option>Feminino</option><option>Masculino</option><option>Outro</option><option>Prefiro não informar</option></select></div>
+          <div class="col"><label>Telefone</label><input id="apptPhone" type="tel" inputmode="numeric" placeholder="(11) 91234-5678" required></div>
+        </div>
+        <div class="row">
+          <div class="col"><label>E-mail</label><input id="apptEmail" type="email" placeholder="nome@dominio.com" required></div>
+          <div class="col"><label>Convênio</label><select id="apptInsurance" required><option value="">Selecione</option><option>SUS</option><option>Particular</option><option>Unimed</option><option>Amil</option><option>Bradesco Saúde</option><option>Hapvida</option><option>NotreDame Intermédica</option><option>São Francisco Saúde</option><option>Golden Cross</option><option>PlanServ</option></select></div>
+        </div>
+        <div class="row">
+          <div class="col"><label>Endereço</label><input id="apptAddress" required minlength="5" placeholder="Rua, número, bairro, cidade"></div>
+          <div class="col"></div>
+        </div>
+        <label>Motivo / Observações</label><textarea id="apptNotes" rows="3" placeholder="Descreva sintomas, observações e motivo da consulta"></textarea>
+        <div class="actions"><button type="submit" class="primary">Marcar Consulta</button><button type="button" id="cancelAppt">Cancelar</button></div>
+      </form>
+      <h3 id="agendaTitle">Agenda do dia</h3>
+      <div id="agendaDay"></div>
+    </section>
+
+    <section id="view-doctors" class="card view hidden">
+      <h2>Cadastro de Médicos</h2>
+      <form id="doctorForm" class="appt-form doctor-form-wrap">
+        <div class="row">
+          <div class="col">
+            <label for="doctorName">Nome do médico</label>
+            <input id="doctorName" name="doctorName" required placeholder="Ex: Dr. João da Silva">
+          </div>
+          <div class="col">
+            <label for="doctorSpecialty">Especialidade</label>
+            <select id="doctorSpecialty" name="doctorSpecialty" required>
+              <option value="">Selecione</option>
+              <option>Cardiologia</option>
+              <option>Dermatologia</option>
+              <option>Endocrinologia</option>
+              <option>Ginecologia</option>
+              <option>Neurologia</option>
+              <option>Clínica Geral</option>
+              <option>Pediatria</option>
+              <option>Ortopedia</option>
+              <option>Psiquiatria</option>
+              <option>Urologia</option>
+              <option>Emergencista</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label>Dias de trabalho</label>
+            <div class="checkbox-grid">
+              <label class="check-option"><input type="checkbox" name="doctorDays" value="Segunda"> Segunda</label>
+              <label class="check-option"><input type="checkbox" name="doctorDays" value="Terça"> Terça</label>
+              <label class="check-option"><input type="checkbox" name="doctorDays" value="Quarta"> Quarta</label>
+              <label class="check-option"><input type="checkbox" name="doctorDays" value="Quinta"> Quinta</label>
+              <label class="check-option"><input type="checkbox" name="doctorDays" value="Sexta"> Sexta</label>
+              <label class="check-option"><input type="checkbox" name="doctorDays" value="Sábado"> Sábado</label>
+              <label class="check-option"><input type="checkbox" name="doctorDays" value="Domingo"> Domingo</label>
+            </div>
+          </div>
+          <div class="col">
+            <label for="doctorStartTime">Horário inicial</label>
+            <input id="doctorStartTime" name="doctorStartTime" type="time" required>
+            <label for="doctorEndTime" class="top-space">Horário final</label>
+            <input id="doctorEndTime" name="doctorEndTime" type="time" required>
+            <label for="doctorRoom" class="top-space">Número da sala</label>
+            <input id="doctorRoom" name="doctorRoom" required placeholder="Ex: Sala 23">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="primary">Salvar médico</button>
+          <button type="button" id="resetDoctorForm" class="secondary-btn">Limpar</button>
+        </div>
+      </form>
+
+      <div class="card list-card doctor-list-wrap">
+        <h3>Escala cadastrada</h3>
+        <div id="doctorList" class="doctor-list"></div>
+      </div>
+    </section>
+
+    <section id="view-dashboard" class="card view hidden">
+      <h2>Dashboard</h2>
+      <div class="cards">
+        <div class="card-mini"><strong id="cardToday">0</strong><div>Pacientes hoje</div></div>
+        <div class="card-mini"><strong id="cardAwaiting">0</strong><div>Aguardando</div></div>
+        <div class="card-mini"><strong id="cardInService">0</strong><div>Em atendimento</div></div>
+        <div class="card-mini"><strong id="cardFinished">0</strong><div>Finalizados</div></div>
+        <div class="card-mini"><strong id="cardEmerg">0</strong><div>Emergências</div></div>
+      </div>
+      <div class="card list-card">
+        <h2>Pacientes Registrados</h2>
+        <div class="table-wrap">
+          <table id="dashboardPatientsTable">
+            <thead>
+              <tr><th>ID</th><th>Nome</th><th>Data Nasc</th><th>Prioridade</th><th>Contato</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-callpanel" class="card view hidden">
+      <h2>Painel de Chamada</h2>
+      <div class="call-display">
+        <div class="big-text">SENHA <span id="panelId">—</span></div>
+        <div class="medium-text">DIRIJA-SE À SALA <span id="panelRoom">—</span></div>
+        <div class="medium-text">MÉDICO: <span id="panelDoctor">—</span></div>
+      </div>
+      <h3>Histórico</h3>
+      <div id="callHistory"></div>
+    </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

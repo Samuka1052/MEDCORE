@@ -1,0 +1,6 @@
+node_modules/
+.env
+auth-users.json
+/.e
+/tokens/
+/123456789-20260929T174105Z-1-001/
