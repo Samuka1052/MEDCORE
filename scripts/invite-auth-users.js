@@ -23,6 +23,15 @@ if (!Array.isArray(users) || users.some(user => !user.email || !/^[^\s@]+@[^\s@]
   process.exit(1);
 }
 
+const targetEmail = process.argv[2];
+const targetUsers = targetEmail
+  ? users.filter(user => user.email.toLowerCase() === targetEmail.toLowerCase())
+  : users;
+if (targetEmail && targetUsers.length === 0) {
+  console.error('O e-mail informado não está cadastrado em auth-users.json.');
+  process.exit(1);
+}
+
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false }
 });
@@ -30,7 +39,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 (async () => {
   let invited = 0;
   let failed = 0;
-  for (const [index, user] of users.entries()) {
+  for (const [index, user] of targetUsers.entries()) {
     const { error } = await supabase.auth.admin.inviteUserByEmail(user.email, {
       redirectTo: `${appUrl}/reset-password.html`
     });
