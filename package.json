@@ -4,12 +4,14 @@
   "description": "Sistema de recepção hospitalar com backend Express e Supabase",
   "main": "server.js",
   "scripts": {
+    "build": "node scripts/prepare-vercel.js",
     "start": "node server.js",
+    "start:background": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\start-server.ps1",
+    "stop:background": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\stop-server.ps1",
     "auth:invite": "node scripts/invite-auth-users.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
-    "@wppconnect-team/wppconnect": "^2.3.4",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

@@ -50,9 +50,18 @@ const authUsersPath = path.join(__dirname, 'auth-users.json');
 const authSessionCache = new Map();
 let authUsers = [];
 
-if (fs.existsSync(authUsersPath)) {
+if (process.env.AUTH_USERS_JSON) {
+  authUsers = JSON.parse(process.env.AUTH_USERS_JSON);
+} else if (fs.existsSync(authUsersPath)) {
   authUsers = JSON.parse(fs.readFileSync(authUsersPath, 'utf8'));
-  if (!Array.isArray(authUsers) || authUsers.some(user =>
+}
+
+if (!Array.isArray(authUsers)) {
+  throw new Error('AUTH_USERS_JSON ou auth-users.json deve conter uma lista JSON.');
+}
+if (authUsers.length) {
+  if (authUsers.some(user =>
+    !user ||
     !/^\d{11}$/.test(user.cpf) ||
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email) ||
     !Number.isInteger(user.level) ||
@@ -67,8 +76,88 @@ if (fs.existsSync(authUsersPath)) {
   if (new Set(cpfs).size !== cpfs.length || new Set(emails).size !== emails.length) {
     throw new Error('auth-users.json não pode repetir CPF ou e-mail.');
   }
+} else if (process.env.VERCEL) {
+  throw new Error('Configure AUTH_USERS_JSON nas variáveis de ambiente da Vercel.');
 } else {
   console.warn('auth-users.json não encontrado; autenticação CPF/e-mail indisponível.');
+}
+
+if (process.env.VERCEL && !supabase) {
+  throw new Error('Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY nas variáveis de ambiente da Vercel.');
+}
+
+async function getPatients() {
+  if (!supabase) return [...patients];
+  const rows = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from('patients')
+      .select('data')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    rows.push(...data.map(row => row.data));
+    if (data.length < pageSize) return rows;
+  }
+}
+
+async function savePatient(patient) {
+  const normalized = {
+    ...patient,
+    createdAt: patient.createdAt || new Date().toISOString(),
+    status: patient.status || 'waiting'
+  };
+  if (!supabase) {
+    const index = patients.findIndex(item => item.id === normalized.id);
+    if (index >= 0) patients[index] = { ...patients[index], ...normalized };
+    else patients.unshift(normalized);
+    return;
+  }
+
+  const { error } = await supabase.from('patients').upsert({
+    id: String(normalized.id),
+    data: normalized,
+    created_at: normalized.createdAt,
+    status: normalized.status,
+    priority: normalized.priority || 'Normal'
+  });
+  if (error) throw error;
+}
+
+async function updatePatient(id, update) {
+  if (!supabase) {
+    const patient = patients.find(item => String(item.id) === String(id));
+    if (!patient) return null;
+    Object.assign(patient, update);
+    return patient;
+  }
+
+  const { data, error } = await supabase.from('patients').select('data').eq('id', String(id)).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const patient = { ...data.data, ...update };
+  const { error: saveError } = await supabase.from('patients').upsert({
+    id: String(patient.id),
+    data: patient,
+    created_at: patient.createdAt || new Date().toISOString(),
+    status: patient.status || 'waiting',
+    priority: patient.priority || 'Normal'
+  });
+  if (saveError) throw saveError;
+  return patient;
+}
+
+function mapDoctor(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    specialty: row.specialty,
+    days: row.days || [],
+    startTime: row.start_time,
+    endTime: row.end_time,
+    room: row.room || ''
+  };
 }
 
 function createAuthClient() {
@@ -354,11 +443,17 @@ function priorityOrder(value) {
 
 app.get('/api/ping', (req, res) => res.json({ ok: true }));
 
-app.get('/api/doctors', (req, res) => {
-  res.json(doctors);
-});
+app.get('/api/doctors', asyncAuthRoute(async (req, res) => {
+  if (!supabase) return res.json(doctors);
+  const { data, error } = await supabase.from('doctors').select('*').order('id');
+  if (error) {
+    console.error('Erro ao carregar médicos do Supabase:', error.message);
+    return res.status(500).json({ error: 'Não foi possível carregar os médicos.' });
+  }
+  res.json(data.map(mapDoctor));
+}));
 
-app.post('/api/doctors', requireAuthLevel(3), (req, res) => {
+app.post('/api/doctors', requireAuthLevel(3), asyncAuthRoute(async (req, res) => {
   const doctor = req.body;
   const specialties = ['Cardiologia', 'Dermatologia', 'Endocrinologia', 'Ginecologia', 'Neurologia', 'Clínica Geral', 'Pediatria', 'Ortopedia', 'Psiquiatria', 'Urologia', 'Emergencista'];
   if (!doctor?.name || !doctor?.specialty || !specialties.includes(String(doctor.specialty).trim()) || !Array.isArray(doctor?.days) || !doctor?.days.length || !doctor?.startTime || !doctor?.endTime || !doctor?.room) {
@@ -366,7 +461,7 @@ app.post('/api/doctors', requireAuthLevel(3), (req, res) => {
   }
 
   const normalized = {
-    id: doctor.id || Date.now(),
+    id: Number(doctor.id) || Date.now(),
     name: String(doctor.name).trim(),
     specialty: String(doctor.specialty).trim(),
     days: doctor.days.map(day => String(day).trim()).filter(Boolean),
@@ -374,6 +469,23 @@ app.post('/api/doctors', requireAuthLevel(3), (req, res) => {
     endTime: String(doctor.endTime).trim(),
     room: String(doctor.room).trim()
   };
+
+  if (supabase) {
+    const { data, error } = await supabase.from('doctors').upsert({
+      id: normalized.id,
+      name: normalized.name,
+      specialty: normalized.specialty,
+      days: normalized.days,
+      start_time: normalized.startTime,
+      end_time: normalized.endTime,
+      room: normalized.room
+    }, { onConflict: 'name' }).select().single();
+    if (error) {
+      console.error('Erro ao salvar médico no Supabase:', error.message);
+      return res.status(500).json({ error: 'Não foi possível salvar o médico.' });
+    }
+    return res.json({ ok: true, doctor: mapDoctor(data) });
+  }
 
   const index = doctors.findIndex(item => item.name.toLowerCase() === normalized.name.toLowerCase());
   if (index >= 0) {
@@ -383,44 +495,56 @@ app.post('/api/doctors', requireAuthLevel(3), (req, res) => {
   }
 
   res.json({ ok: true, doctor: normalized });
-});
+}));
 
-app.delete('/api/doctors/:id', requireAuthLevel(3), (req, res) => {
+app.delete('/api/doctors/:id', requireAuthLevel(3), asyncAuthRoute(async (req, res) => {
+  if (supabase) {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id)) return res.status(400).json({ error: 'ID de médico inválido.' });
+    const { error } = await supabase.from('doctors').delete().eq('id', id);
+    if (error) {
+      console.error('Erro ao remover médico do Supabase:', error.message);
+      return res.status(500).json({ error: 'Não foi possível remover o médico.' });
+    }
+    return res.json({ ok: true });
+  }
   const index = doctors.findIndex(item => String(item.id) === String(req.params.id));
   if (index === -1) return res.status(404).json({ error: 'doctor not found' });
   doctors.splice(index, 1);
   res.json({ ok: true });
-});
+}));
 
-app.post('/api/patients', requireAuthLevel(2), (req, res) => {
+app.post('/api/patients', requireAuthLevel(2), asyncAuthRoute(async (req, res) => {
   const patient = req.body;
   if (!patient?.id || !patient?.name) {
     return res.status(400).json({ error: 'id and name required' });
   }
 
-  const index = patients.findIndex(item => item.id === patient.id);
-  if (index >= 0) {
-    patients[index] = { ...patients[index], ...patient };
-  } else {
-    patients.unshift({
-      ...patient,
-      createdAt: patient.createdAt || new Date().toISOString(),
-      status: patient.status || 'waiting'
-    });
+  try {
+    await savePatient(patient);
+  } catch (error) {
+    console.error('Erro ao salvar paciente no Supabase:', error.message);
+    return res.status(500).json({ error: 'Não foi possível salvar o paciente.' });
   }
 
   res.json({ ok: true });
-});
+}));
 
-app.get('/api/patients', (req, res) => {
-  res.json([...patients].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-});
+app.get('/api/patients', asyncAuthRoute(async (req, res) => {
+  try {
+    res.json(await getPatients());
+  } catch (error) {
+    console.error('Erro ao carregar pacientes do Supabase:', error.message);
+    res.status(500).json({ error: 'Não foi possível carregar os pacientes.' });
+  }
+}));
 
-app.get('/api/search', (req, res) => {
+app.get('/api/search', asyncAuthRoute(async (req, res) => {
   const q = (req.query.q || '').trim().toLowerCase();
   if (!q) return res.json([]);
 
-  const rows = patients.filter(patient => [
+  const list = await getPatients();
+  const rows = list.filter(patient => [
     patient.id,
     patient.name,
     patient.phone,
@@ -429,10 +553,11 @@ app.get('/api/search', (req, res) => {
   ].some(value => String(value || '').toLowerCase().includes(q)));
 
   res.json(rows);
-});
+}));
 
-app.get('/api/queue', (req, res) => {
-  const rows = patients
+app.get('/api/queue', asyncAuthRoute(async (req, res) => {
+  const list = await getPatients();
+  const rows = list
     .filter(patient => patient.status === 'waiting' || !patient.status)
     .sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority) || new Date(a.createdAt) - new Date(b.createdAt));
 
@@ -443,37 +568,65 @@ app.get('/api/queue', (req, res) => {
     queueNumber: patient.queueNumber,
     name: patient.name
   })));
-});
+}));
 
-app.post('/api/queue/call', requireAuthLevel(2), (req, res) => {
+app.post('/api/queue/call', requireAuthLevel(2), asyncAuthRoute(async (req, res) => {
   const { id, room } = req.body;
   if (!id) return res.status(400).json({ error: 'id required' });
 
-  const patient = patients.find(item => item.id === id);
+  const calledAt = new Date().toISOString();
+  if (supabase) {
+    const { data: patient, error } = await supabase.rpc('call_patient', {
+      p_patient_id: String(id),
+      p_room: room || 'A definir',
+      p_called_at: calledAt
+    });
+    if (error) {
+      console.error('Erro ao registrar chamada no Supabase:', error.message);
+      return res.status(500).json({ error: 'Não foi possível registrar a chamada.' });
+    }
+    if (!patient) return res.status(404).json({ error: 'patient not found' });
+    return res.json({ ok: true, calledAt });
+  }
+
+  const patient = await updatePatient(id, { status: 'in_service', calledAt, room: room || 'A definir' });
   if (!patient) return res.status(404).json({ error: 'patient not found' });
-
-  patient.status = 'in_service';
-  patient.calledAt = new Date().toISOString();
-  patient.room = room || 'A definir';
-  calls.unshift({ patientId: patient.id, room: patient.room, calledAt: patient.calledAt });
+  calls.unshift({ patientId: patient.id, room: patient.room, calledAt });
   res.json({ ok: true, calledAt: patient.calledAt });
-});
+}));
 
-app.post('/api/queue/finish', requireAuthLevel(2), (req, res) => {
+app.post('/api/queue/finish', requireAuthLevel(2), asyncAuthRoute(async (req, res) => {
   const { id } = req.body;
   if (!id) return res.status(400).json({ error: 'id required' });
 
-  const patient = patients.find(item => item.id === id);
+  const finishedAt = new Date().toISOString();
+  const patient = await updatePatient(id, { status: 'finished', finishedAt });
   if (!patient) return res.status(404).json({ error: 'patient not found' });
-
-  patient.status = 'finished';
-  patient.finishedAt = new Date().toISOString();
   res.json({ ok: true });
-});
+}));
 
-app.get('/api/calls', (req, res) => {
-  res.json(calls.slice(0, 50));
-});
+app.get('/api/calls', asyncAuthRoute(async (req, res) => {
+  if (!supabase) return res.json(calls.slice(0, 50));
+  const { data, error } = await supabase.from('calls').select('*').order('called_at', { ascending: false }).limit(50);
+  if (error) {
+    console.error('Erro ao carregar chamadas do Supabase:', error.message);
+    return res.status(500).json({ error: 'Não foi possível carregar o histórico de chamadas.' });
+  }
+  res.json(data.map(row => ({ patientId: row.patient_id, room: row.room, calledAt: row.called_at })));
+}));
+
+app.delete('/api/patients', requireAuthLevel(3), asyncAuthRoute(async (req, res) => {
+  if (supabase) {
+    const { error } = await supabase.from('patients').delete().neq('id', '');
+    if (error) {
+      console.error('Erro ao limpar pacientes no Supabase:', error.message);
+      return res.status(500).json({ error: 'Não foi possível limpar os pacientes.' });
+    }
+  } else {
+    patients.length = 0;
+  }
+  res.json({ ok: true });
+}));
 
 app.post('/api/appointments', requireAuthLevel(2), async (req, res) => {
   const a = req.body;
@@ -547,12 +700,20 @@ app.delete('/api/appointments/:id', requireAuthLevel(3), async (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/patients/:id', requireAuthLevel(3), async (req, res) => {
+app.delete('/api/patients/:id', requireAuthLevel(3), asyncAuthRoute(async (req, res) => {
+  if (supabase) {
+    const { error } = await supabase.from('patients').delete().eq('id', String(req.params.id));
+    if (error) {
+      console.error('Erro ao remover paciente do Supabase:', error.message);
+      return res.status(500).json({ error: 'Não foi possível remover o paciente.' });
+    }
+    return res.json({ ok: true });
+  }
   const index = patients.findIndex(item => String(item.id) === String(req.params.id));
   if (index === -1) return res.status(404).json({ error: 'patient not found' });
   patients.splice(index, 1);
   res.json({ ok: true });
-});
+}));
 
 app.put('/api/appointments/:id', requireAuthLevel(2), async (req, res) => {
   const id = Number(req.params.id);
@@ -600,12 +761,18 @@ app.get('/api/appointments', async (req, res) => {
   if (supabase) {
     let query = supabase.from('appointments').select('*').order('datetime', { ascending: Boolean(day) });
     if (day) query = query.gte('datetime', `${day}T00:00:00.000Z`).lt('datetime', `${day}T23:59:59.999Z`);
-    const { data, error } = await query;
-    if (error) {
-      console.error('Erro ao carregar agendamentos do Supabase:', error.message);
-      return res.status(500).json({ error: error.message });
+    const rows = [];
+    const pageSize = 1000;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await query.range(offset, offset + pageSize - 1);
+      if (error) {
+        console.error('Erro ao carregar agendamentos do Supabase:', error.message);
+        return res.status(500).json({ error: error.message });
+      }
+      rows.push(...data);
+      if (data.length < pageSize) break;
     }
-    return res.json(data.map(mapAppointment));
+    return res.json(rows.map(mapAppointment));
   }
   if (day) {
     const rows = appointments.filter(item => item.datetime && item.datetime.slice(0, 10) === day);
@@ -614,60 +781,25 @@ app.get('/api/appointments', async (req, res) => {
   res.json(appointments.sort((a, b) => new Date(b.datetime) - new Date(a.datetime)));
 });
 
-app.get('/api/dashboard', (req, res) => {
+app.get('/api/dashboard', asyncAuthRoute(async (req, res) => {
+  const patientList = await getPatients();
   const today = new Date().toISOString().slice(0, 10);
-  const patientsToday = patients.filter(p => p.createdAt && p.createdAt.slice(0, 10) === today).length;
-  const awaiting = patients.filter(p => p.status === 'waiting' || !p.status).length;
-  const inService = patients.filter(p => p.status === 'in_service').length;
-  const finished = patients.filter(p => p.status === 'finished').length;
-  const emergencies = patients.filter(p => p.priority === 'Emergência').length;
+  const patientsToday = patientList.filter(p => p.createdAt && p.createdAt.slice(0, 10) === today).length;
+  const awaiting = patientList.filter(p => p.status === 'waiting' || !p.status).length;
+  const inService = patientList.filter(p => p.status === 'in_service').length;
+  const finished = patientList.filter(p => p.status === 'finished').length;
+  const emergencies = patientList.filter(p => p.priority === 'Emergência').length;
 
   res.json({ patientsToday, awaiting, inService, finished, emergencies });
-});
+}));
 
 app.use('/auth-users.json', (req, res) => res.sendStatus(404));
 app.use(express.static(path.join(__dirname)));
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
-
-
-const wppconnect = require('@wppconnect-team/wppconnect');
-
-// Inicializa a sessão do WhatsApp
-wppconnect
-  .create({
-    session: 'sessao-troca-senha', // Nome da sessão
-    catchQR: (base64Qr, asciiQR, attempts, urlCode) => {
-      console.log('Número de tentativas de ler o QR Code:', attempts);
-    },
-    statusFind: (statusSession, session) => {
-      console.log('Status da Sessão:', statusSession);
-    },
-    headless: true, // Roda em segundo plano sem abrir interface gráfica do Chrome
-  })
-  .then((client) => start(client))
-  .catch((error) => console.log(error));
-
-// Função que gerencia o cliente após a conexão
-function start(client) {
-  console.log('WhatsApp conectado com sucesso!');
-
-  // Exemplo de como você chamaria essa função no seu fluxo de redefinição de senha
-  // Você pode criar uma rota HTTP (usando Express) para disparar isso sob demanda
-  async function enviarLinkRedefinicao(numero, link) {
-    try {
-      const mensagem = `Olá! Recebemos uma solicitação para redefinir sua senha.\n\nClique no link abaixo para cadastrar uma nova senha:\n${link}\n\nSe não foi você que solicitou, ignore esta mensagem.`;
-
-      // O número precisa estar no formato internacional: 55 + DDD + Número + @c.us
-      await client.sendText(`${numero}@c.us`, mensagem);
-      console.log(`Link de redefinição enviado para ${numero}`);
-    } catch (err) {
-      console.error('Erro ao enviar mensagem:', err);
-    }
-  }
-
-  // Teste automático (remover ou comentar após testar)
-  // enviarLinkRedefinicao('5581999998888', 'https://seusite.com');
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`);
+  });
 }
+
+module.exports = app;

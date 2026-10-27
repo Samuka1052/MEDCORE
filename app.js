@@ -552,28 +552,19 @@
 
   async function loadDoctors(){
     if (serverAvailable) {
-      try {
-        const res = await fetch('/api/doctors');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length) {
-            const localDoctors = readLocalDoctors();
-            const localByName = new Map(localDoctors.map(item => [String(item.name).toLowerCase(), item]));
-            const merged = data.map(item => ({
-              ...(localByName.get(String(item.name).toLowerCase()) || {}),
-              ...item,
-              room: item.room || localByName.get(String(item.name).toLowerCase())?.room || DOCTOR_ROOM_MAP[item.name] || ''
-            }));
-            const serverNames = new Set(merged.map(item => String(item.name).toLowerCase()));
-            merged.push(...localDoctors.filter(item => !serverNames.has(String(item.name).toLowerCase())));
-            doctorsCatalog = merged;
-            writeLocalDoctors(merged);
-            return merged;
-          }
-        }
-      } catch (e) {
-        // fallback local
-      }
+      const response = await fetch('/api/doctors');
+      if (!response.ok) throw new Error('Não foi possível carregar os médicos do servidor.');
+      const data = await response.json();
+      if (!Array.isArray(data)) throw new Error('A resposta de médicos do servidor é inválida.');
+      const localDoctors = readLocalDoctors();
+      const localByName = new Map(localDoctors.map(item => [String(item.name).toLowerCase(), item]));
+      doctorsCatalog = data.map(item => ({
+        ...(localByName.get(String(item.name).toLowerCase()) || {}),
+        ...item,
+        room: item.room || localByName.get(String(item.name).toLowerCase())?.room || DOCTOR_ROOM_MAP[item.name] || ''
+      }));
+      writeLocalDoctors(doctorsCatalog);
+      return doctorsCatalog;
     }
     doctorsCatalog = readLocalDoctors();
     return doctorsCatalog;
@@ -598,8 +589,8 @@
         try { details = (await response.json()).error || details; } catch (error) { /* use default */ }
         throw new Error(details);
       } catch (e) {
-        if (e instanceof Error && e.message !== 'Failed to fetch') throw e;
-        // fallback local when the server is unavailable
+        console.error('Não foi possível salvar o médico no servidor:', e);
+        throw e;
       }
     }
 
@@ -617,20 +608,26 @@
 
   async function loadPatients(){
     if(serverAvailable){
-      try{
-        const res = await fetch('/api/patients');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) return data;
-        }
-      }catch(e){ /* fallthrough */ }
+      const response = await fetch('/api/patients');
+      if (!response.ok) throw new Error('Não foi possível carregar os pacientes do servidor.');
+      const data = await response.json();
+      if (!Array.isArray(data)) throw new Error('A resposta de pacientes do servidor é inválida.');
+      return data;
     }
     return readLocalPatients();
   }
 
   async function savePatient(patient){
     if(serverAvailable){
-      try{ await fetch('/api/patients',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(patient)}); return; }catch(e){ /* fallback */ }
+      try {
+        const response = await fetch('/api/patients', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patient) });
+        if (!response.ok) throw new Error('O servidor não confirmou o cadastro do paciente.');
+        return true;
+      } catch (error) {
+        console.error('Não foi possível salvar o paciente no servidor:', error);
+        alert('Não foi possível salvar o paciente no servidor. Nenhum dado foi salvo localmente.');
+        return false;
+      }
     }
     const list = readLocalPatients();
     const index = list.findIndex(item => item.id === patient.id);
@@ -640,6 +637,7 @@
       list.unshift(patient);
     }
     writeLocalPatients(list);
+    return true;
   }
 
   async function renderTable(){
@@ -797,7 +795,7 @@
       status: 'waiting'
     };
 
-    await savePatient(patient);
+    if (!await savePatient(patient)) return;
     await renderTable();
     form.reset();
     patientIdEl.textContent = '—';
@@ -823,7 +821,11 @@
     if (!requireLevel(3)) return;
     if(confirm('Apagar todos os pacientes salvos?')){
       if(serverAvailable){
-        alert('Limpeza remota ainda não implementada. Você pode apagar manualmente no banco de dados.');
+        const response = await fetch('/api/patients', { method: 'DELETE' });
+        if (!response.ok) {
+          alert('Não foi possível apagar os pacientes do servidor.');
+          return;
+        }
       }
       localStorage.removeItem(STORAGE_KEY);
       await renderTable();
@@ -949,9 +951,15 @@
       return;
     }
 
-    patient.status = 'finished';
-    patient.finishedAt = new Date().toISOString();
-    await savePatient(patient);
+    const response = await fetch('/api/queue/finish', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: patientId })
+    });
+    if (!response.ok) {
+      alert('Não foi possível finalizar o atendimento no servidor.');
+      return;
+    }
     if (selectedTicket && selectedTicket.id === patientId) selectedTicket = null;
     await renderQueue();
     await renderInProgress();
@@ -989,18 +997,16 @@
       callRoomInput.focus();
       return;
     }
-    const patients = await loadPatients();
-    const currentPatient = patients.find(p => p.id === selectedTicket.id);
-    if (!currentPatient) {
-      alert('Paciente não encontrado.');
+    const currentPatient = selectedTicket;
+    const response = await fetch('/api/queue/call', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: currentPatient.id, room })
+    });
+    if (!response.ok) {
+      alert('Não foi possível chamar o paciente no servidor.');
       return;
     }
-
-    currentPatient.status = 'in_service';
-    currentPatient.calledAt = new Date().toISOString();
-    currentPatient.doctor = currentPatient.doctor || selectedTicket.doctor || '';
-    currentPatient.room = room;
-    await savePatient(currentPatient);
     await renderQueue();
     await renderInProgress();
     await renderCallPanel();
@@ -1305,13 +1311,11 @@
 
   async function loadAppointments(){
     if(serverAvailable){
-      try{
-        const res = await fetch('/api/appointments');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) return data;
-        }
-      }catch(e){ /* fallthrough */ }
+      const response = await fetch('/api/appointments');
+      if (!response.ok) throw new Error('Não foi possível carregar os agendamentos do servidor.');
+      const data = await response.json();
+      if (!Array.isArray(data)) throw new Error('A resposta de agendamentos do servidor é inválida.');
+      return data;
     }
     return readLocalAppointments();
   }
@@ -1351,14 +1355,16 @@
   }
 
   async function updateAppointment(appointment){
+    if(serverAvailable){
+      const response = await fetch(`/api/appointments/${appointment.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(appointment) });
+      if (!response.ok) throw new Error('Não foi possível atualizar o agendamento no servidor.');
+      return;
+    }
     const list = readLocalAppointments();
     const index = list.findIndex(item => String(item.id) === String(appointment.id));
     if (index >= 0) list[index] = { ...list[index], ...appointment };
     else list.push(appointment);
     writeLocalAppointments(list);
-    if(serverAvailable){
-      try { await fetch(`/api/appointments/${appointment.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(appointment) }); } catch(e) { /* local storage remains available */ }
-    }
   }
 
   async function updateAppointmentArrivalTime(appointmentId, arrivalTimeValue){
@@ -1422,7 +1428,7 @@
       patient.room = appointment.room;
       if (!patient.queueNumber) patient.queueNumber = nextQueueNumber(patientsList.map(item => item.queueNumber).filter(Boolean));
     }
-    await savePatient(patient);
+    if (!await savePatient(patient)) return;
     await renderQueue();
     await renderDashboard();
     await renderAppointments();

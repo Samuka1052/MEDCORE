@@ -1,4 +1,6 @@
 node_modules/
+.medcore-runtime/
+public/
 .env
 auth-users.json
 /.e
