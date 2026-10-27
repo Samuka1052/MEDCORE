@@ -794,7 +794,7 @@ app.get('/api/dashboard', asyncAuthRoute(async (req, res) => {
 }));
 
 app.use('/auth-users.json', (req, res) => res.sendStatus(404));
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, 'public')));
 
 if (require.main === module) {
   app.listen(PORT, () => {

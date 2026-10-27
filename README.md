@@ -105,7 +105,7 @@ O projeto pode ser importado pela Vercel a partir do GitHub. Antes do primeiro d
 
 1. Execute todo o arquivo `supabase.sql` no **SQL Editor** do Supabase. Além dos agendamentos, ele cria as tabelas persistentes de pacientes, médicos e chamadas.
 2. Envie ao GitHub as alterações do projeto e importe o repositório `Samuka1052/MEDCORE` em [vercel.com/new](https://vercel.com/new).
-   O build configurado em `vercel.json` copia os arquivos da interface para `public/`, diretório servido pela CDN da Vercel.
+   Os arquivos da interface ficam em `public/`, diretório que a Vercel serve pela CDN; o Express também usa essa pasta ao servir a aplicação localmente.
 3. Em **Project Settings > Environment Variables**, configure estas variáveis para Production (e Preview, se necessário):
    - `SUPABASE_URL`: URL do projeto, no formato `https://<project-id>.supabase.co`.
    - `SUPABASE_ANON_KEY`: chave pública do Supabase Auth.
