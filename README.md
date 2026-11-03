@@ -119,6 +119,12 @@ As variáveis alteradas na Vercel exigem um novo deploy para entrarem em vigor. 
 
 Cadastros que existam apenas na memória do servidor local ou no `localStorage` do navegador não são transferidos automaticamente para o Supabase. Faça e confira uma migração autorizada antes de usar esses registros no deploy.
 
+### Funcionários e escala médica
+
+Execute novamente o arquivo `supabase.sql` no SQL Editor para criar a tabela segura `staff_accounts` e inicializar os três vínculos CPF/e-mail existentes a partir de `AUTH_USERS_JSON` (ou `auth-users.json` no desenvolvimento local). A inicialização ocorre uma única vez; depois disso, os cadastros são mantidos no Supabase e não são sobrescritos pelo valor da variável.
+
+O nível 3 pode cadastrar funcionários com uma senha inicial, redefinir suas senhas pelo Supabase Auth e remover contas. As senhas nunca são lidas nem armazenadas pela aplicação. O nível 2 pode consultar a escala médica, mas não pode cadastrar ou remover médicos.
+
 ## Login por CPF e recuperação de senha
 
 O login usa o Supabase Auth; o CPF é associado ao e-mail no arquivo local `auth-users.json`. Esse arquivo contém dados pessoais e está no `.gitignore`: não o publique nem o envie ao repositório. Para criar sua cópia a partir do modelo:

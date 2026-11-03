@@ -49,6 +49,7 @@ const appUrl = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/+$
 const authUsersPath = path.join(__dirname, 'auth-users.json');
 const authSessionCache = new Map();
 let authUsers = [];
+let staffBootstrapPromise;
 
 if (process.env.AUTH_USERS_JSON) {
   authUsers = JSON.parse(process.env.AUTH_USERS_JSON);
@@ -171,18 +172,40 @@ function createAuthClient() {
   });
 }
 
-function getAuthUserByEmail(email) {
-  return authUsers.find(user => user.email.toLowerCase() === String(email || '').toLowerCase());
+async function getStaffAccounts() {
+  if (!supabase) return authUsers;
+  if (!staffBootstrapPromise) {
+    staffBootstrapPromise = (async () => {
+      const { error: bootstrapError } = await supabase.rpc('bootstrap_staff_accounts', {
+        p_accounts: authUsers
+      });
+      if (bootstrapError) throw bootstrapError;
+    })().finally(() => {
+      staffBootstrapPromise = null;
+    });
+  }
+  await staffBootstrapPromise;
+  const { data, error } = await supabase
+    .from('staff_accounts')
+    .select('cpf, email, level, label')
+    .order('cpf');
+  if (error) throw error;
+  return data;
 }
 
-function getAuthProfile(user) {
-  const account = getAuthUserByEmail(user.email);
+async function getAuthUserByEmail(email) {
+  const staff = await getStaffAccounts();
+  return staff.find(user => user.email.toLowerCase() === String(email || '').toLowerCase());
+}
+
+async function getAuthProfile(user) {
+  const account = await getAuthUserByEmail(user.email);
   if (!account) return null;
   return { cpf: account.cpf, level: account.level, label: account.label };
 }
 
-function rememberAuthSession(session, user) {
-  const profile = getAuthProfile(user);
+async function rememberAuthSession(session, user) {
+  const profile = await getAuthProfile(user);
   if (!profile) return null;
   const now = Date.now();
   for (const [token, cached] of authSessionCache) {
@@ -236,11 +259,11 @@ function asyncAuthRoute(handler) {
 
 app.post('/api/auth/login', asyncAuthRoute(async (req, res) => {
   const client = createAuthClient();
-  if (!client || !authUsers.length) return authNotConfigured(res);
+  if (!client) return authNotConfigured(res);
 
   const cpf = String(req.body?.cpf || '').replace(/\D/g, '');
   const password = String(req.body?.password || '');
-  const account = authUsers.find(user => user.cpf === cpf);
+  const account = (await getStaffAccounts()).find(user => user.cpf === cpf);
   if (!account || !password) return res.status(401).json({ error: 'CPF ou senha inválidos.' });
 
   const { data, error } = await client.auth.signInWithPassword({ email: account.email, password });
@@ -252,7 +275,7 @@ app.post('/api/auth/login', asyncAuthRoute(async (req, res) => {
     return res.status(401).json({ error: 'CPF ou senha inválidos.' });
   }
 
-  const profile = rememberAuthSession(data.session, data.user);
+  const profile = await rememberAuthSession(data.session, data.user);
   if (!profile) {
     await client.auth.signOut();
     return res.status(403).json({ error: 'Conta sem CPF associado neste sistema.' });
@@ -269,14 +292,14 @@ app.get('/api/auth/session', asyncAuthRoute(async (req, res) => {
   if (!refreshToken) return res.status(401).json({ error: 'Sessão não encontrada.' });
 
   const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken });
-  const profile = data.user && getAuthProfile(data.user);
+  const profile = data.user && await getAuthProfile(data.user);
   if (error || !data.session || !profile) {
     clearAuthCookies(res);
     return res.status(401).json({ error: 'Sessão expirada ou inválida.' });
   }
 
   writeAuthCookies(res, data.session);
-  rememberAuthSession(data.session, data.user);
+  await rememberAuthSession(data.session, data.user);
   res.json({ user: profile });
 }));
 
@@ -303,14 +326,14 @@ app.post('/api/auth/logout', asyncAuthRoute(async (req, res) => {
 
 app.post('/api/auth/recover', asyncAuthRoute(async (req, res) => {
   const client = createAuthClient();
-  if (!client || !authUsers.length) return authNotConfigured(res);
+  if (!client) return authNotConfigured(res);
 
   const email = String(req.body?.email || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'Informe um e-mail válido.' });
   }
 
-  const account = getAuthUserByEmail(email);
+  const account = await getAuthUserByEmail(email);
   if (account) {
     const { error } = await client.auth.resetPasswordForEmail(account.email, {
       redirectTo: `${appUrl}/reset-password.html`
@@ -326,7 +349,7 @@ app.post('/api/auth/recover', asyncAuthRoute(async (req, res) => {
 
 app.post('/api/auth/password', asyncAuthRoute(async (req, res) => {
   const client = createAuthClient();
-  if (!client || !authUsers.length) return authNotConfigured(res);
+  if (!client) return authNotConfigured(res);
 
   const accessToken = String(req.body?.accessToken || '');
   const refreshToken = String(req.body?.refreshToken || '');
@@ -342,7 +365,7 @@ app.post('/api/auth/password', asyncAuthRoute(async (req, res) => {
     access_token: accessToken,
     refresh_token: refreshToken
   });
-  if (sessionError || !sessionData.user || !getAuthProfile(sessionData.user)) {
+  if (sessionError || !sessionData.user || !await getAuthProfile(sessionData.user)) {
     return res.status(400).json({ error: 'O link de recuperação está inválido ou expirou.' });
   }
 
@@ -382,7 +405,7 @@ async function getRequestAuthProfile(req, res) {
     return rememberAuthSession(data.session, data.user);
   }
 
-  const profile = getAuthProfile(user);
+  const profile = await getAuthProfile(user);
   if (!profile) return null;
   authSessionCache.set(accessToken, { profile, expiresAt: Date.now() + 30000 });
   return profile;
@@ -408,6 +431,115 @@ function requireAuthLevel(level) {
     return res.status(403).json({ error: 'Seu nível de acesso não permite esta ação.' });
   };
 }
+
+async function findAuthUserByEmail(email) {
+  for (let page = 1; ; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw error;
+    const user = data.users.find(item => item.email?.toLowerCase() === email.toLowerCase());
+    if (user || data.users.length < 1000) return user || null;
+  }
+}
+
+app.get('/api/admin/employees', requireAuthLevel(3), asyncAuthRoute(async (req, res) => {
+  if (!supabase) return authNotConfigured(res);
+  res.json(await getStaffAccounts());
+}));
+
+app.post('/api/admin/employees', requireAuthLevel(3), asyncAuthRoute(async (req, res) => {
+  if (!supabase) return authNotConfigured(res);
+  const cpf = String(req.body?.cpf || '').replace(/\D/g, '');
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const label = String(req.body?.label || '').trim();
+  const level = Number(req.body?.level);
+  const password = String(req.body?.password || '');
+
+  if (!/^\d{11}$/.test(cpf) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      !label || !Number.isInteger(level) || level < 1 || level > 3 || password.length < 8) {
+    return res.status(400).json({ error: 'Informe CPF, e-mail, nome, nível válido e uma senha com pelo menos 8 caracteres.' });
+  }
+
+  const employees = await getStaffAccounts();
+  if (employees.some(employee => employee.cpf === cpf || employee.email.toLowerCase() === email)) {
+    return res.status(409).json({ error: 'Já existe um funcionário com esse CPF ou e-mail.' });
+  }
+
+  const { data, error } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true
+  });
+  if (error || !data.user) {
+    console.error('Erro ao criar usuário no Supabase Auth:', error?.code || error?.status || 'unknown');
+    return res.status(502).json({ error: 'Não foi possível criar a conta de login.' });
+  }
+
+  const { error: insertError } = await supabase.from('staff_accounts').insert({ cpf, email, label, level });
+  if (insertError) {
+    const { error: rollbackError } = await supabase.auth.admin.deleteUser(data.user.id);
+    if (rollbackError) console.error('Falha ao remover usuário após erro no cadastro:', rollbackError.code || rollbackError.status);
+    console.error('Erro ao salvar funcionário no Supabase:', insertError.message);
+    return res.status(500).json({ error: 'Não foi possível salvar o cadastro do funcionário.' });
+  }
+
+  staffBootstrapPromise = null;
+  res.status(201).json({ ok: true, employee: { cpf, email, label, level } });
+}));
+
+app.put('/api/admin/employees/:cpf/password', requireAuthLevel(3), asyncAuthRoute(async (req, res) => {
+  if (!supabase) return authNotConfigured(res);
+  const cpf = String(req.params.cpf || '').replace(/\D/g, '');
+  const password = String(req.body?.password || '');
+  if (!/^\d{11}$/.test(cpf) || password.length < 8) {
+    return res.status(400).json({ error: 'Informe uma senha com pelo menos 8 caracteres.' });
+  }
+
+  const account = (await getStaffAccounts()).find(employee => employee.cpf === cpf);
+  if (!account) return res.status(404).json({ error: 'Funcionário não encontrado.' });
+  const authUser = await findAuthUserByEmail(account.email);
+  if (!authUser) return res.status(404).json({ error: 'A conta de login não foi encontrada no Supabase Auth.' });
+
+  const { error } = await supabase.auth.admin.updateUserById(authUser.id, { password });
+  if (error) {
+    console.error('Erro ao atualizar senha no Supabase Auth:', error.code || error.status);
+    return res.status(502).json({ error: 'Não foi possível atualizar a senha.' });
+  }
+  res.json({ ok: true });
+}));
+
+app.delete('/api/admin/employees/:cpf', requireAuthLevel(3), asyncAuthRoute(async (req, res) => {
+  if (!supabase) return authNotConfigured(res);
+  const cpf = String(req.params.cpf || '').replace(/\D/g, '');
+  if (!/^\d{11}$/.test(cpf)) return res.status(400).json({ error: 'CPF inválido.' });
+  if (req.authUser.cpf === cpf) return res.status(400).json({ error: 'Não é possível remover o próprio usuário enquanto estiver conectado.' });
+
+  const employees = await getStaffAccounts();
+  const account = employees.find(employee => employee.cpf === cpf);
+  if (!account) return res.status(404).json({ error: 'Funcionário não encontrado.' });
+  if (account.level === 3 && employees.filter(employee => employee.level === 3).length <= 1) {
+    return res.status(400).json({ error: 'Não é possível remover o último administrador.' });
+  }
+
+  const authUser = await findAuthUserByEmail(account.email);
+  if (authUser) {
+    const { error } = await supabase.auth.admin.deleteUser(authUser.id);
+    if (error) {
+      console.error('Erro ao remover conta do Supabase Auth:', error.code || error.status);
+      return res.status(502).json({ error: 'Não foi possível remover a conta de login.' });
+    }
+  }
+
+  const { error } = await supabase.from('staff_accounts').delete().eq('cpf', cpf);
+  if (error) {
+    console.error('Erro ao remover cadastro de funcionário do Supabase:', error.message);
+    return res.status(500).json({ error: 'A conta foi desativada, mas não foi possível remover o cadastro. Contate o suporte.' });
+  }
+  staffBootstrapPromise = null;
+  for (const [token, cached] of authSessionCache) {
+    if (cached.profile.cpf === cpf) authSessionCache.delete(token);
+  }
+  res.json({ ok: true });
+}));
 
 if (supabaseUrl && !/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(supabaseUrl)) {
   console.warn('SUPABASE_URL invalida. Use a Project URL, por exemplo: https://seu-id.supabase.co');

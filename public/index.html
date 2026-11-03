@@ -63,6 +63,7 @@
       <button data-view="search">Buscar</button>
       <button data-view="appointments">Agendamentos</button>
       <button data-view="doctors">Médicos</button>
+      <button data-view="employees">Funcionários</button>
       <button data-view="dashboard">Dashboard</button>
       <button data-view="callpanel">Painel de Chamada</button>
     </nav>
@@ -243,8 +244,9 @@
     </section>
 
     <section id="view-doctors" class="card view hidden">
-      <h2>Cadastro de Médicos</h2>
+      <h2>Escala Médica</h2>
       <form id="doctorForm" class="appt-form doctor-form-wrap">
+        <h3>Gerenciar médicos</h3>
         <div class="row">
           <div class="col">
             <label for="doctorName">Nome do médico</label>
@@ -301,6 +303,48 @@
       <div class="card list-card doctor-list-wrap">
         <h3>Escala cadastrada</h3>
         <div id="doctorList" class="doctor-list"></div>
+      </div>
+    </section>
+
+    <section id="view-employees" class="card view hidden">
+      <h2>Funcionários</h2>
+      <p class="muted">Gerencie os acessos por CPF. As senhas são administradas pelo Supabase e nunca são exibidas ou armazenadas neste sistema.</p>
+      <form id="employeeForm" class="appt-form">
+        <h3>Cadastrar funcionário</h3>
+        <div class="row">
+          <div class="col">
+            <label for="employeeCpf">CPF (11 números)</label>
+            <input id="employeeCpf" inputmode="numeric" maxlength="14" autocomplete="off" required>
+          </div>
+          <div class="col">
+            <label for="employeeEmail">E-mail de login</label>
+            <input id="employeeEmail" type="email" autocomplete="email" required>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="employeeLabel">Nome / identificação</label>
+            <input id="employeeLabel" required>
+          </div>
+          <div class="col">
+            <label for="employeeLevel">Nível de acesso</label>
+            <select id="employeeLevel" required>
+              <option value="1">Nível 1 — consulta</option>
+              <option value="2">Nível 2 — recepção</option>
+              <option value="3">Nível 3 — administração</option>
+            </select>
+          </div>
+        </div>
+        <label for="employeeInitialPassword">Senha inicial (mínimo 8 caracteres)</label>
+        <input id="employeeInitialPassword" type="password" minlength="8" autocomplete="new-password" required>
+        <div class="actions">
+          <button type="submit" class="primary">Cadastrar funcionário</button>
+        </div>
+        <p id="employeeMessage" class="form-message" role="status" aria-live="polite"></p>
+      </form>
+      <div class="card list-card">
+        <h3>Contas cadastradas</h3>
+        <div id="employeeList" class="employee-list" aria-live="polite"></div>
       </div>
     </section>
 

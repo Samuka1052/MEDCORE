@@ -688,6 +688,7 @@
     search: 1,
     appointments: 2,
     doctors: 1,
+    employees: 3,
     dashboard: 1,
     callpanel: 1
   };
@@ -713,6 +714,7 @@
     const view = document.getElementById(`view-${name}`);
     if (view) view.classList.remove('hidden');
     if (name === 'doctors') renderDoctors();
+    if (name === 'employees') renderEmployees();
   }
 
   navButtons.forEach(button => {
@@ -1054,6 +1056,142 @@
   const doctorForm = document.getElementById('doctorForm');
   const doctorList = document.getElementById('doctorList');
   const resetDoctorFormBtn = document.getElementById('resetDoctorForm');
+  const employeeForm = document.getElementById('employeeForm');
+  const employeeList = document.getElementById('employeeList');
+  const employeeMessage = document.getElementById('employeeMessage');
+
+  async function renderEmployees(){
+    employeeList.replaceChildren();
+    const loading = document.createElement('p');
+    loading.className = 'muted';
+    loading.textContent = 'Carregando funcionários…';
+    employeeList.appendChild(loading);
+
+    try {
+      const response = await fetch('/api/admin/employees');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os funcionários.');
+      if (!Array.isArray(data)) throw new Error('A resposta do servidor é inválida.');
+      employeeList.replaceChildren();
+      if (!data.length) {
+        const empty = document.createElement('p');
+        empty.className = 'muted';
+        empty.textContent = 'Nenhum funcionário cadastrado.';
+        employeeList.appendChild(empty);
+        return;
+      }
+
+      data.forEach(employee => {
+        const card = document.createElement('article');
+        card.className = 'employee-card';
+        const details = document.createElement('div');
+        details.className = 'employee-details';
+        const name = document.createElement('h4');
+        name.textContent = employee.label;
+        const identity = document.createElement('p');
+        identity.textContent = `CPF: ${employee.cpf} · ${employee.email} · Nível ${employee.level}`;
+        details.append(name, identity);
+
+        const passwordForm = document.createElement('form');
+        passwordForm.className = 'employee-password-form';
+        const password = document.createElement('input');
+        password.type = 'password';
+        password.minLength = 8;
+        password.autocomplete = 'new-password';
+        password.placeholder = 'Nova senha (mínimo 8 caracteres)';
+        password.setAttribute('aria-label', `Nova senha para ${employee.label}`);
+        password.required = true;
+        const updatePasswordButton = document.createElement('button');
+        updatePasswordButton.type = 'submit';
+        updatePasswordButton.className = 'secondary-btn';
+        updatePasswordButton.textContent = 'Alterar senha';
+        passwordForm.append(password, updatePasswordButton);
+        passwordForm.addEventListener('submit', async event => {
+          event.preventDefault();
+          updatePasswordButton.disabled = true;
+          try {
+            const result = await fetch(`/api/admin/employees/${encodeURIComponent(employee.cpf)}/password`, {
+              method: 'PUT',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ password: password.value })
+            });
+            const responseData = await result.json();
+            if (!result.ok) throw new Error(responseData.error || 'Não foi possível alterar a senha.');
+            passwordForm.reset();
+            employeeMessage.classList.remove('error');
+            employeeMessage.textContent = `Senha alterada para ${employee.label}.`;
+          } catch (error) {
+            employeeMessage.textContent = error.message || 'Não foi possível alterar a senha.';
+            employeeMessage.classList.add('error');
+          } finally {
+            updatePasswordButton.disabled = false;
+          }
+        });
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'danger';
+        removeButton.textContent = 'Remover funcionário';
+        removeButton.addEventListener('click', async () => {
+          if (!confirm(`Remover ${employee.label} e desativar seu acesso?`)) return;
+          removeButton.disabled = true;
+          try {
+            const result = await fetch(`/api/admin/employees/${encodeURIComponent(employee.cpf)}`, { method: 'DELETE' });
+            const responseData = await result.json();
+            if (!result.ok) throw new Error(responseData.error || 'Não foi possível remover o funcionário.');
+            employeeMessage.classList.remove('error');
+            employeeMessage.textContent = `Funcionário removido: ${employee.label}.`;
+            await renderEmployees();
+          } catch (error) {
+            employeeMessage.textContent = error.message || 'Não foi possível remover o funcionário.';
+            employeeMessage.classList.add('error');
+            removeButton.disabled = false;
+          }
+        });
+
+        card.append(details, passwordForm, removeButton);
+        employeeList.appendChild(card);
+      });
+    } catch (error) {
+      employeeList.replaceChildren();
+      const errorMessage = document.createElement('p');
+      errorMessage.className = 'error-text visible';
+      errorMessage.textContent = error.message || 'Não foi possível carregar os funcionários.';
+      employeeList.appendChild(errorMessage);
+    }
+  }
+
+  employeeForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    employeeMessage.textContent = '';
+    employeeMessage.classList.remove('error');
+    const employee = {
+      cpf: document.getElementById('employeeCpf').value.replace(/\D/g, ''),
+      email: document.getElementById('employeeEmail').value.trim(),
+      label: document.getElementById('employeeLabel').value.trim(),
+      level: Number(document.getElementById('employeeLevel').value),
+      password: document.getElementById('employeeInitialPassword').value
+    };
+    const submitButton = employeeForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      const response = await fetch('/api/admin/employees', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(employee)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível cadastrar o funcionário.');
+      employeeForm.reset();
+      employeeMessage.textContent = `Funcionário cadastrado: ${data.employee.label}.`;
+      await renderEmployees();
+    } catch (error) {
+      employeeMessage.textContent = error.message || 'Não foi possível cadastrar o funcionário.';
+      employeeMessage.classList.add('error');
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
 
   async function renderDoctors(){
     const doctors = await loadDoctors();

@@ -57,6 +57,7 @@ on conflict (doctor) do update set room = excluded.room, specialty = excluded.sp
 
 -- The Node server uses the service-role key and bypasses RLS.
 -- No public policies are required for this server-side integration.
+-- Re-run this file after deploying employee management to create its staff tables.
 
 create table if not exists public.patients (
   id text primary key,
@@ -129,6 +130,65 @@ create table if not exists public.doctors (
 
 alter table public.doctors enable row level security;
 grant select, insert, update, delete on public.doctors to service_role;
+
+create table if not exists public.staff_accounts (
+  cpf text primary key check (cpf ~ '^[0-9]{11}$'),
+  email text not null unique,
+  level integer not null check (level between 1 and 3),
+  label text not null
+);
+
+alter table public.staff_accounts enable row level security;
+grant select, insert, update, delete on public.staff_accounts to service_role;
+
+create table if not exists public.staff_account_settings (
+  id smallint primary key check (id = 1),
+  initialized boolean not null default false
+);
+
+insert into public.staff_account_settings (id, initialized)
+values (1, false)
+on conflict (id) do nothing;
+
+create or replace function public.bootstrap_staff_accounts(p_accounts jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  account jsonb;
+  already_initialized boolean;
+begin
+  select initialized into already_initialized
+  from public.staff_account_settings
+  where id = 1
+  for update;
+
+  if already_initialized then
+    return;
+  end if;
+
+  for account in select value from jsonb_array_elements(p_accounts)
+  loop
+    insert into public.staff_accounts (cpf, email, level, label)
+    values (
+      account->>'cpf',
+      lower(account->>'email'),
+      (account->>'level')::integer,
+      account->>'label'
+    )
+    on conflict (cpf) do nothing;
+  end loop;
+
+  update public.staff_account_settings
+  set initialized = true
+  where id = 1;
+end;
+$$;
+
+revoke all on function public.bootstrap_staff_accounts(jsonb) from public, anon, authenticated;
+grant execute on function public.bootstrap_staff_accounts(jsonb) to service_role;
 
 insert into public.doctors (id, name, specialty, days, start_time, end_time) values
   (1, 'Dra. Ana Beatriz', 'Cardiologia', '["Segunda", "Quarta", "Sexta"]'::jsonb, '08:00', '12:00'),

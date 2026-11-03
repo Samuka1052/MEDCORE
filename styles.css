@@ -98,6 +98,14 @@ th{color:var(--muted);font-weight:600}
 .doctor-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 .doctor-card{padding:12px;border:1px solid #eaf2ff;border-radius:10px;background:#f9fbff}
 .doctor-card h4{margin:0 0 8px 0;color:var(--dark-blue)}
+.employee-list{display:grid;gap:12px}
+.employee-card{display:grid;grid-template-columns:minmax(180px,1fr) minmax(240px,1fr) auto;gap:12px;align-items:center;padding:12px;border:1px solid #eaf2ff;border-radius:10px;background:#f9fbff}
+.employee-details h4,.employee-details p{margin:0}
+.employee-details h4{color:var(--dark-blue)}
+.employee-details p{margin-top:5px;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.employee-password-form{display:flex;gap:8px;align-items:center}
+.employee-password-form input{min-width:0}
+@media (max-width:720px){.employee-card{grid-template-columns:1fr}.employee-password-form{flex-wrap:wrap}.employee-password-form button{width:100%}}
 .doctor-meta{color:var(--muted);font-size:13px;line-height:1.5}
 .queue-section .ticket .danger{margin-top:8px;padding:6px 9px;font-size:12px}
 .status-badge{display:inline-block;margin-left:6px;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:600}
