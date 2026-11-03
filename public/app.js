@@ -11,6 +11,8 @@
   const recoveryMessage = document.getElementById('recoveryMessage');
   const backToLoginBtn = document.getElementById('backToLoginBtn');
   const sessionLabel = document.getElementById('sessionLabel');
+  const refreshDataBtn = document.getElementById('refreshDataBtn');
+  const refreshMessage = document.getElementById('refreshMessage');
   const logoutBtn = document.getElementById('logoutBtn');
   let currentUser = null;
 
@@ -1078,7 +1080,7 @@
         empty.className = 'muted';
         empty.textContent = 'Nenhum funcionário cadastrado.';
         employeeList.appendChild(empty);
-        return;
+        return true;
       }
 
       data.forEach(employee => {
@@ -1152,12 +1154,14 @@
         card.append(details, passwordForm, removeButton);
         employeeList.appendChild(card);
       });
+      return true;
     } catch (error) {
       employeeList.replaceChildren();
       const errorMessage = document.createElement('p');
       errorMessage.className = 'error-text visible';
       errorMessage.textContent = error.message || 'Não foi possível carregar os funcionários.';
       employeeList.appendChild(errorMessage);
+      return false;
     }
   }
 
@@ -1193,8 +1197,8 @@
     }
   });
 
-  async function renderDoctors(){
-    const doctors = await loadDoctors();
+  async function renderDoctors(doctorData){
+    const doctors = doctorData || await loadDoctors();
     const finalDoctors = Array.isArray(doctors) && doctors.length ? doctors : readLocalDoctors();
     if (!doctorList) return;
     doctorList.innerHTML = '';
@@ -1652,6 +1656,29 @@
       history.appendChild(d);
     });
   }
+
+  refreshDataBtn.addEventListener('click', async () => {
+    refreshDataBtn.disabled = true;
+    refreshMessage.classList.remove('error');
+    refreshMessage.textContent = 'Atualizando escalas…';
+    try {
+      const doctors = await loadDoctors();
+      await renderDoctors(doctors);
+      await refreshDoctorOptions();
+      await refreshAppointmentDates();
+      await refreshAppointmentTimes();
+      if (hasLevel(3) && !await renderEmployees()) {
+        throw new Error('Não foi possível atualizar a lista de funcionários.');
+      }
+      refreshMessage.textContent = 'Escalas atualizadas.';
+    } catch (error) {
+      console.error('Erro ao atualizar escalas:', error);
+      refreshMessage.textContent = error.message || 'Não foi possível atualizar as escalas.';
+      refreshMessage.classList.add('error');
+    } finally {
+      refreshDataBtn.disabled = false;
+    }
+  });
 
   await restoreSession();
   applyAccessRules();

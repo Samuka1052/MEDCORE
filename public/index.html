@@ -67,7 +67,12 @@
       <button data-view="dashboard">Dashboard</button>
       <button data-view="callpanel">Painel de Chamada</button>
     </nav>
-    <div class="session-bar"><span id="sessionLabel"></span><button type="button" id="logoutBtn">Sair</button></div>
+    <div class="session-bar">
+      <span id="sessionLabel"></span>
+      <span id="refreshMessage" class="refresh-message" role="status" aria-live="polite"></span>
+      <button type="button" id="refreshDataBtn">Atualizar dados</button>
+      <button type="button" id="logoutBtn">Sair</button>
+    </div>
 
     <section id="view-register" class="card view">
       <form id="patientForm" novalidate>
