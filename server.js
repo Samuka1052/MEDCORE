@@ -45,7 +45,11 @@ const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-const appUrl = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
+const vercelProductionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+const defaultAppUrl = process.env.VERCEL && vercelProductionUrl
+  ? `https://${vercelProductionUrl}`
+  : `http://localhost:${PORT}`;
+const appUrl = (process.env.APP_URL || defaultAppUrl).replace(/\/+$/, '');
 const authUsersPath = path.join(__dirname, 'auth-users.json');
 const authSessionCache = new Map();
 let authUsers = [];

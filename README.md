@@ -111,8 +111,8 @@ O projeto pode ser importado pela Vercel a partir do GitHub. Antes do primeiro d
    - `SUPABASE_ANON_KEY`: chave pública do Supabase Auth.
    - `SUPABASE_SERVICE_ROLE_KEY`: chave secreta de servidor. Nunca use essa chave no navegador ou no GitHub.
    - `AUTH_USERS_JSON`: conteúdo JSON de `auth-users.json`, que associa CPFs a e-mails e níveis. Cadastre o valor como variável secreta, sem adicionar o arquivo ao GitHub.
-   - `APP_URL`: URL HTTPS do deploy, sem barra final, por exemplo `https://seu-projeto.vercel.app`.
-4. Faça o deploy. Em **Supabase > Authentication > URL Configuration**, configure a URL pública do projeto como **Site URL** e adicione `https://seu-projeto.vercel.app/reset-password.html` às **Redirect URLs**.
+   - `APP_URL`: domínio público estável de produção, sem barra final, por exemplo `https://seu-projeto.vercel.app`. Não use uma URL de preview por implantação; na ausência desta variável, a Vercel usa o domínio de produção do projeto automaticamente.
+4. Faça o deploy. Em **Supabase > Authentication > URL Configuration**, configure a URL pública estável de produção como **Site URL** e adicione `https://seu-projeto.vercel.app/reset-password.html` às **Redirect URLs**. A URL precisa corresponder ao domínio configurado em `APP_URL`; não use um domínio de preview que exija login da Vercel.
 5. Teste a página, o login, recuperação de senha e gravação/leitura de dados antes de usar com pacientes.
 
 As variáveis alteradas na Vercel exigem um novo deploy para entrarem em vigor. Não publique dados reais de pacientes antes de revisar os controles de acesso, políticas e obrigações legais aplicáveis.
