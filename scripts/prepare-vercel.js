@@ -9,7 +9,8 @@ const assets = [
   'styles.css',
   'reset-password.html',
   'reset-password.js',
-  'MEDCORE_Logo_horizontal_azul-semfundo.png'
+  'MEDCORE_Logo_horizontal_azul-semfundo.png',
+  'MEDCORE-Iconazul-semfundo.png'
 ];
 
 fs.mkdirSync(publicDirectory, { recursive: true });
