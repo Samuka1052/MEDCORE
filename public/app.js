@@ -680,6 +680,45 @@
     event.target.value = applyPhoneMask(event.target.value);
   });
 
+  const navButtons = document.querySelectorAll('.topnav button');
+  const VIEW_LEVELS = {
+    register: 2,
+    queue: 2,
+    'in-progress': 2,
+    search: 1,
+    appointments: 2,
+    doctors: 1,
+    dashboard: 1,
+    callpanel: 1
+  };
+
+  function applyAccessRules(){
+    const level = currentUser ? currentUser.level : 0;
+    navButtons.forEach(button => {
+      button.classList.toggle('hidden', level < (VIEW_LEVELS[button.dataset.view] || 99));
+    });
+    const adminOnly = document.querySelectorAll('.admin-only');
+    adminOnly.forEach(element => element.classList.toggle('hidden', level < 3));
+    clearBtn.classList.toggle('hidden', level < 3);
+    const doctorFormWrap = document.querySelector('.doctor-form-wrap');
+    if (doctorFormWrap) doctorFormWrap.classList.toggle('hidden', level < 3);
+  }
+
+  function showView(name){
+    if (!requireLevel(VIEW_LEVELS[name] || 99)) return;
+    document.querySelectorAll('.view').forEach(view => view.classList.add('hidden'));
+    navButtons.forEach(button => button.classList.remove('active'));
+    const button = document.querySelector(`.topnav button[data-view="${name}"]`);
+    if (button) button.classList.add('active');
+    const view = document.getElementById(`view-${name}`);
+    if (view) view.classList.remove('hidden');
+    if (name === 'doctors') renderDoctors();
+  }
+
+  navButtons.forEach(button => {
+    button.addEventListener('click', () => showView(button.dataset.view));
+  });
+
   ['name', 'email', 'phone', 'address', 'dob'].forEach((fieldId) => {
     const input = document.getElementById(fieldId);
     const rule = fieldId === 'phone' ? 'phone' : fieldId === 'email' ? 'email' : fieldId === 'name' ? 'name' : fieldId === 'address' ? 'address' : 'dob';
@@ -833,44 +872,6 @@
   });
 
   await renderTable();
-
-  const navButtons = document.querySelectorAll('.topnav button');
-  const VIEW_LEVELS = {
-    register: 2,
-    queue: 2,
-    'in-progress': 2,
-    search: 1,
-    appointments: 2,
-    doctors: 1,
-    dashboard: 1,
-    callpanel: 1
-  };
-
-  function applyAccessRules(){
-    const level = currentUser ? currentUser.level : 0;
-    navButtons.forEach(button => {
-      button.classList.toggle('hidden', level < (VIEW_LEVELS[button.dataset.view] || 99));
-    });
-    const adminOnly = document.querySelectorAll('.admin-only');
-    adminOnly.forEach(element => element.classList.toggle('hidden', level < 3));
-    clearBtn.classList.toggle('hidden', level < 3);
-    const doctorFormWrap = document.querySelector('.doctor-form-wrap');
-    if (doctorFormWrap) doctorFormWrap.classList.toggle('hidden', level < 3);
-  }
-
-  function showView(name){
-    if (!requireLevel(VIEW_LEVELS[name] || 99)) return;
-    document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));
-    document.querySelectorAll('.topnav button').forEach(b=>b.classList.remove('active'));
-    const btn = document.querySelector(`.topnav button[data-view="${name}"]`);
-    if(btn) btn.classList.add('active');
-    const el = document.getElementById('view-' + name);
-    if(el) el.classList.remove('hidden');
-    if (name === 'doctors') {
-      renderDoctors();
-    }
-  }
-  navButtons.forEach(b=>b.addEventListener('click', ()=> showView(b.dataset.view)));
 
   const urgentQueueListEl = document.getElementById('urgentQueueList');
   const scheduledQueueListEl = document.getElementById('scheduledQueueList');
